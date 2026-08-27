@@ -298,6 +298,120 @@ ASC->ClearAllAbilities();   // 清掉所有
 >
 > </details>
 >
+> 📖 **"写死了吗？以后怎么取？" —— 类 vs 实例的关键区分 ↓**
+>
+> <details>
+> <summary><b>🎯 点击展开：是写死的吗？以后怎么取值？</b></summary>
+>
+> ### 分两层看"写死"
+>
+> | 层 | 内容 | 是否写死 |
+> |----|------|---------|
+> | **技能类 (UClass)** | `ULyraGA_Jump::StaticClass()` | ✅ 编译期固定（"跳跃"这个概念本身） |
+> | **技能实例 (Spec)** | `FGameplayAbilitySpec(JumpClass, Level, this)` | ❌ 运行时动态（谁拥有、几级都不同） |
+>
+> ### 🔑 类 vs 实例（理解的核心）
+>
+> | | 技能类 (UClass) | 技能实例 (Spec/Handle) |
+> |---|---|---|
+> | **是什么** | "跳跃"的模板/概念 | 某角色身上的具体跳跃能力 |
+> | **数量** | 全游戏只有 1 个 | 每个角色各有一份 |
+> | **何时确定** | 写代码时固定 | 运行时授予时创建 |
+> | **类比** | 饼干的**模具** | 用模具压出的**饼干** |
+> | **例子** | `ULyraGA_Jump::StaticClass()` | `FGameplayAbilitySpec(JumpClass, 1, this)` |
+>
+> > 💡 同一个 JumpClass，角色 A 授予等级1、Boss 授予等级5 → **类相同，实例不同**。
+>
+> ### 授予后如何"取回来"？（三种方式）
+>
+> ```cpp
+> // 方式一：用授予时返回的 Handle（需自己保存）
+> FGameplayAbilitySpecHandle JumpHandle = ASC->GiveAbility(...);
+> ASC->TryActivateAbility(JumpHandle);   // 激活
+> ASC->ClearAbility(JumpHandle);         // 移除
+>
+> // 方式二：用类反查（更常用，不用存 Handle）⭐
+> ASC->TryActivateAbilityByClass(JumpClass);           // 激活
+> ASC->GetAbilityInstanceFromAbilityObject(JumpClass); // 取实例
+>
+> // 方式三：遍历 ASC 所有已授予技能
+> for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities()) {
+>     UE_LOG(LogTemp, Log, TEXT("技能: %s, 等级: %d"),
+>         *Spec.Ability->GetName(), Spec.Level);
+> }
+> ```
+>
+> ### 🎮 Lyra 的真实做法（不写死在角色代码里）
+>
+> ```
+> PawnData（数据资产，策划配）
+>    └── 配置：这个角色要哪些技能 + 什么等级
+>          ↓
+> 角色初始化读取 PawnData
+>          ↓
+> 遍历技能列表，逐个 GiveAbility（程序只写一次通用逻辑）
+>          ↓
+> 每个实例登记到 ASC
+> ```
+>
+> - **技能类** → 配在 PawnData/AbilitySet 数据资产里
+> - **授予时机** → 角色初始化时自动完成
+> - **取值方式** → 通过 ASC 的 Handle 或按类反查
+>
+> ### 📊 完整生命周期
+>
+> ```
+> 【编译期】JumpClass 定义（模具，唯一）
+>                │
+> 【运行时】角色A出生 → GiveAbility(JumpClass, Lv1) → 创建 Spec_A → 返回 Handle_A
+>                │
+>          玩家按键 → TryActivateAbility(Handle_A) → 执行跳跃
+>                │
+>          角色A死亡 → ClearAbility(Handle_A) → 回收实例
+>                │
+>          （同一份 JumpClass 还能给角色B用，等级可以不同）
+> ```
+>
+> ### ⚠️ 关于命名：JumpClass / AbilityClass 到底是什么？
+>
+> **没有改名！** `JumpClass` 不是引擎内置的，只是示例里的**变量别名**，代表"跳跃技能这个类"。
+>
+> ```cpp
+> // 你定义的技能类（全名）
+> class ULyraGameplayAbility_Jump : public ULyraGameplayAbility { };
+>
+> // JumpClass 是一个变量，存了这个类的类型信息
+> TSubclassOf<UGameplayAbility> JumpClass = ULyraGameplayAbility_Jump::StaticClass();
+>
+> // 传给 ASC
+> ASC->TryActivateAbilityByClass(JumpClass);
+> ```
+>
+> **三个名字指同一个东西**：
+>
+> | 名字 | 语境 | 含义 |
+> |------|------|------|
+> | `ULyraGameplayAbility_Jump::StaticClass()` | 定义时 | 真实的类类型信息 |
+> | `JumpClass` | 示例变量 | 指向跳跃类的别名（短，好懂） |
+> | `AbilityClass` | GiveAbility 参数 | 泛指"任意技能类" |
+>
+> > 💡 完整写法对比：
+> > ```cpp
+> > // ❌ 不能直接写字面量
+> > ASC->TryActivateAbilityByClass(ULyraGA_Jump);
+> >
+> > // ✅ 先存变量再用
+> > TSubclassOf<UGameplayAbility> JumpClass = ULyraGameplayAbility_Jump::StaticClass();
+> > ASC->TryActivateAbilityByClass(JumpClass);
+> >
+> > // ✅ 或内联写
+> > ASC->TryActivateAbilityByClass(ULyraGameplayAbility_Jump::StaticClass());
+> > ```
+>
+> **Lyra 真实做法**：不手写类名，通过 InputConfig 数据资产自动映射 InputTag → GA 类，全程数据驱动。
+>
+> </details>
+>
 > 📖 **看不懂上面那行 GiveAbility？再往下有逐词拆解 ↓**
 >
 > <details>
