@@ -235,6 +235,134 @@ ASC->ClearAbility(Handle);
 ASC->ClearAllAbilities();   // 清掉所有
 ```
 
+> 📖 **不知道这三个参数一开始怎么定？往下看"如何确定三个参数" ↓**
+>
+> <details>
+> <summary><b>🧠 点击展开：我一开始怎么知道填什么？</b></summary>
+>
+> **核心思路转换**：不是"运行时猜参数"，而是"设计阶段就定好答案，参数只是把答案填进去"。
+>
+> | 你要回答的问题 | 对应参数 | 答案从哪来 |
+> |---------------|---------|-----------|
+> | **1. 给什么技能？** | `AbilityClass` | 你写的 GA 类（如 `ULyraGA_Jump`） |
+> | **2. 技能几级？** | `Level` | 你的数值设计（初级=1，满级=5） |
+> | **3. 谁授予的？** | `SourceObject` | 通常是调用者自己（`this`） |
+>
+> ### 1️⃣ AbilityClass —— 想给什么能力就填什么
+> ```cpp
+> // 想让角色会跳跃 → 填 Jump 的类
+> FGameplayAbilitySpec(ULyraGameplayAbility_Jump::StaticClass(), ...)
+> // ::StaticClass() 是 UE 固定写法，拿到一个类的"类型信息"
+> ```
+>
+> ### 2️⃣ Level —— 来自数值策划设计
+> - 影响 GE 里 `Level × 系数` 的伤害/冷却计算
+> - 没有明确等级系统时，直接填 `1` 即可
+> ```cpp
+> FGameplayAbilitySpec(FireballClass, 1, this)   // 初级
+> FGameplayAbilitySpec(FireballClass, 5, this)   // 满级
+> ```
+>
+> ### 3️⃣ SourceObject —— 最容易晕，其实是"谁调用就填谁"
+> **本质**：溯源标记，记录"这个技能从哪来的"，用于调试和上下文读取。
+>
+> | 场景 | 填什么 |
+> |------|--------|
+> | AbilitySet 批量授予 | `this`（AbilitySet 自己） |
+> | PawnData 授予 | PawnData 对象 |
+> | 装备授予的技能 | 那件装备的 Instance |
+>
+> > 💡 **简单记忆**：谁调用 GiveAbility，SourceObject 就填谁（`this`），90% 情况如此。
+> > ```cpp
+> > // Lyra 的 AbilitySet 里：
+> > ASC->GiveAbility(FGameplayAbilitySpec(Entry.Ability, Level, this));
+> > //                                                         ↑ 填 this
+> > ```
+>
+> ### 🎯 写代码时的思考顺序
+> ```
+> 1. 要给角色什么能力？→ 跳跃 → ULyraGA_Jump::StaticClass()  (AbilityClass)
+> 2. 什么强度/等级？    → 基础等级 1 → 1                      (Level)
+> 3. 谁给的？          → 当前组件给的 → this                  (SourceObject)
+>
+> 组合：FGameplayAbilitySpec(ULyraGA_Jump::StaticClass(), 1, this)
+> ```
+>
+> ### 🔑 关键认知转变
+> 这三个参数**不需要运行时才知道**，在你写代码那一刻就已确定：
+> - `AbilityClass` → 取决于你想赋予什么能力
+> - `Level` → 取决于你的数值设计
+> - `SourceObject` → 就是调用者自己（`this`）
+>
+> Lyra 把这些值配在 **AbilitySet/PawnData 数据资产**里，初始化时读出来填进去——这就是数据驱动。
+>
+> </details>
+>
+> 📖 **看不懂上面那行 GiveAbility？再往下有逐词拆解 ↓**
+>
+> <details>
+> <summary><b>🔍 点击展开：GiveAbility 逐词拆解</b></summary>
+>
+> **核心概念**："授予 GA" = 把一张"技能卡片"从卡池（UClass 模板）复印一份登记到角色身上。
+>
+> ```cpp
+> FGameplayAbilitySpecHandle Handle = ASC->GiveAbility(
+>     FGameplayAbilitySpec(AbilityClass, Level, SourceObject));
+> ```
+>
+> **逐词拆解**：
+>
+> | 部分 | 含义 | 例子 |
+> |------|------|------|
+> | `FGameplayAbilitySpec(...)` | 构造一份"技能实例档案" | 要复印的技能 + 等级 + 来源 |
+> | `AbilityClass` | **哪个技能**（技能的类类型） | `ULyraGA_Jump::StaticClass()` |
+> | `Level` | **技能等级**（影响伤害/冷却强度） | `1`（初级）、`5`（满级） |
+> | `SourceObject` | **谁授予的**（通常填 PawnData/AbilitySet） | `this` |
+> | `ASC->GiveAbility()` | 让中央监控台执行"登记入库" | — |
+> | `FGameplayAbilitySpecHandle Handle` | 接收返回的**句柄**（取餐小票） | 后续激活/移除都靠它 |
+>
+> **Handle 是什么？**
+> - 一个轻量"取号凭证"，内部只存一个 `int32` ID
+> - 类似**取餐小票**：你点餐（授予）→ 店员给小票（Handle）→ 凭小票取餐（激活）/退餐（移除）
+> - 为什么不直接存 Spec？因为 Spec 存在 ASC 内部数组，外部持有会悬空；Handle 是安全引用
+>
+> **完整流程**：
+> ```cpp
+> // 初始化：授予，拿到句柄
+> FGameplayAbilitySpecHandle JumpHandle = ASC->GiveAbility(
+>     FGameplayAbilitySpec(ULyraGameplayAbility_Jump::StaticClass(), 1, this));
+>
+> // 玩家按键：激活
+> ASC->TryActivateAbility(JumpHandle);
+> // 或更简洁：按类激活
+> ASC->TryActivateAbilityByClass(ULyraGameplayAbility_Jump::StaticClass());
+>
+> // 角色死亡：移除
+> ASC->ClearAbility(JumpHandle);
+> ```
+>
+> **Lyra 的真实写法**：不手写单条 GiveAbility，而是通过 **AbilitySet 批量授予**（数据驱动）：
+> ```cpp
+> // ULyraAbilitySet::GiveToAbilitySystem 里批量授予
+> for (const auto& Entry : Abilities) {
+>     ASC->GiveAbility(FGameplayAbilitySpec(Entry.Ability, Level, this));
+>     ASC->ApplyGameplayEffect(Entry.InitialEffects, ...);
+> }
+> ```
+>
+> **一图总结**：
+> ```
+> UClass(模具) ──GiveAbility(复印登记)──▶ FGameplayAbilitySpec(产品)
+>                                               │
+>                                       返回 Handle(取餐小票)
+>                                               │
+>                     ┌─────────TryActivate─────┼────Clear────────┐
+>                     ▼                         ▼                 ▼
+>                  激活技能                   移除技能          查询能否激活
+> ```
+>
+> </details>
+
 #### 🔹 施加 / 移除效果
 ```cpp
 // ⭐ 施加 GE（造成伤害/治疗/Buff 的核心方法）
