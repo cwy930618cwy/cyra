@@ -12,22 +12,58 @@
 
 ```
 Runtime/Core/
-├── Public/                  ← 头文件（你 #include 的东西）
-│   ├── Containers/          ← ★ 容器：TArray、TMap、TSet、FString、TSharedPtr
-│   ├── Math/                ← ★ 数学：FVector、FRotator、FMath、FTransform
-│   ├── Delegates/           ← ★ 委托：单播/多播/动态委托
-│   ├── Templates/           ← 模板工具：类型特征、移动语义、Tuple
-│   ├── HAL/                 ← 硬件抽象层：线程、锁、文件、内存分配
-│   ├── Misc/                ← 杂项：日志、断言、配置文件、命令行
-│   ├── Serialization/       ← 序列化底层：FArchive、内存布局
-│   ├── UObject/             ← NameTypes.h（FName）、UnrealNames.cpp
-│   ├── Async/               ← 异步任务：Future、Promise、TaskGraph
-│   ├── Compression/         ← 压缩：LZ4、Oodle
-│   ├── Experimental/        ← 实验性：ConcurrentLinearAllocator
-│   └── ...
-├── Private/                 ← 实现文件（.cpp）
-└── Core.Build.cs            ← 模块构建配置
+├── Public/                     ← 头文件（你 #include 的东西）
+│   ├── ★ 核心基础
+│   │   ├── Containers/         ← 容器：TArray、TMap、TSet、FString、TSharedPtr
+│   │   ├── Math/               ← 数学：FVector、FRotator、FMath、FTransform
+│   │   ├── Templates/          ← 模板工具：MoveTemp、类型特征、Tuple、智能指针
+│   │   ├── Delegates/          ← 委托：单播/多播/动态委托
+│   │   └── UObject/            ← FName 名字系统（NameTypes.h）
+│   ├── ⭐ 底层系统
+│   │   ├── HAL/                ← 硬件抽象层：线程、锁、文件、内存接口
+│   │   ├── Serialization/      ← 序列化：FArchive、内存读写
+│   │   ├── Async/              ← 异步：Future、Promise、TaskGraph
+│   │   ├── Tasks/              ← 任务系统：UE 的 Task 系统
+│   │   ├── IO/                 ← IO 操作：异步文件/流读取
+│   │   ├── Memory/             ← 内存管理：内存池、分配器
+│   │   ├── String/             ← 字符串处理：字符转换、字符串算法
+│   │   ├── Hash/               ← 哈希：哈希函数、散列
+│   │   ├── Traits/             ← 类型特征：编译期类型判断
+│   │   ├── Concepts/           ← C++ 概念：模板约束
+│   │   ├── Compression/        ← 压缩：LZ4、Oodle
+│   │   ├── Stats/              ← 统计：游戏统计、性能计数
+│   │   ├── ProfilingDebugging/ ← 性能分析：Profile 标记、调试工具
+│   │   ├── Logging/            ← 日志：Log.h、LogCategory.h
+│   │   └── Misc/               ← 杂项：断言、配置、命令行（最大目录）
+│   ├── 🔧 平台相关
+│   │   ├── GenericPlatform/    ← 通用平台基类（跨平台代码）
+│   │   ├── Windows/ Microsoft/ MSVC/      ← Windows 平台
+│   │   ├── Linux/ Unix/ Clang/            ← Linux 平台
+│   │   ├── Mac/ Apple/                   ← Mac 平台
+│   │   ├── IOS/ Android/                 ← 移动平台
+│   │   └── IntelICX/           ← Intel 编译器
+│   ├── 📦 其他
+│   │   ├── Algo/               ← 算法库：Sort、BinarySearch（类似 std::algorithm）
+│   │   ├── Audio/              ← 音频基础类型
+│   │   ├── ColorManagement/    ← 颜色管理：色彩空间
+│   │   ├── Internationalization/ ← 本地化：多语言、Text 系统
+│   │   ├── Modules/            ← 模块系统：FModuleManager
+│   │   ├── Features/           ← 特性开关
+│   │   ├── FileCache/          ← 文件缓存
+│   │   ├── Experimental/       ← 实验性：ConcurrentLinearAllocator
+│   │   ├── FramePro/ MemPro/   ← 第三方性能分析工具
+│   │   ├── Sanitizer/          ← 内存检查：ASan/UBSan
+│   │   ├── AutoRTFM/           ← 事务内存：实验性原子内存
+│   │   ├── Virtualization/     ← 资产虚拟化
+│   │   └── Tests/              ← 单元测试基础
+│   └── 根目录头文件
+│       ├── Core.h / CoreMinimal.h / CoreFwd.h / CoreTypes.h
+│       └── CoreGlobals.h / CoreSharedPCH.h / PixelFormat.h
+├── Private/                     ← 实现文件（.cpp）
+└── Core.Build.cs                ← 模块构建配置
 ```
+
+> 完整版见文末"七、Core/Public 全目录速查"。日常开发真正高频的只有 **Containers/Math/Delegates/Templates**，平台目录和底层工具（Algo/Stats/Hash/IO...）不用主动学。
 
 ---
 
@@ -221,51 +257,297 @@ for (auto& Pair : HealthMap) {             // 遍历
 
 ### 2.4 委托系统（Delegate）
 
-**文件**：`Public/Delegates/Delegate.h` + `MulticastDelegate.h` + `DynamicDelegate.h`
+**文件**：`Public/Delegates/`（`Delegate.h` / `MulticastDelegate.h` / `DynamicDelegate.h`）
 
-#### 四种委托对比
+#### 什么是委托（一句话）
 
-| 类型 | 声明宏 | 特点 | 使用场景 |
-|------|--------|------|---------|
-| **单播委托** | `DECLARE_DELEGATE` | 只能绑一个函数 | 回调、事件处理 |
-| **多播委托** | `DECLARE_MULTICAST_DELEGATE` | 能绑多个函数 | 广播通知 |
-| **动态单播** | `DECLARE_DYNAMIC_DELEGATE` | 可序列化、蓝图可绑定 | 需要在编辑器中配置 |
-| **动态多播** | `DECLARE_DYNAMIC_MULTICAST_DELEGATE` | 上面两者的结合 | 蓝图事件分发器 |
+委托就是 UE 的 **"类型安全、可绑定多个"的函数指针**。传统 C++ 用函数指针 + `std::function` 做回调，UE 用委托做，好处是：
 
-#### 单播委托源码结构
+- **类型安全**：签名不匹配编译期直接报错
+- **与 UObject 生命周期集成**：`AddUObject` 绑定时，对象销毁后委托能感知（弱引用），避免悬垂指针
+- **支持绑定成员函数、lambda、裸函数、静态函数**
+- **动态委托可序列化、可暴露给蓝图**
 
-```cpp
-// 声明
-DECLARE_DELEGATE_OneParam(FOnHealthChanged, float);
-// 展开后等价于：
-class FOnHealthChanged : public FDelegate {
-    // 存储：对象指针 + 成员函数指针
-    // 调用：Execute(NewValue)
-};
+---
+
+#### 一、目录里有什么（Delegates/）
+
+```
+Public/Delegates/
+├── Delegate.h              ← 单播委托（TDelegate）
+├── MulticastDelegate.h     ← 多播委托（TMulticastDelegate）
+├── DynamicDelegate.h       ← 动态委托（蓝图/序列化用）
+├── DelegateBase.h          ← 两种委托的公共基类（类型擦除存储）
+├── DelegateSignatureImpl.inl  ← 宏展开后的具体实现（模板）
+├── MulticastDelegateBase.h ← 多播委托的基类
+└── ...（各种 .inl 实现文件）
 ```
 
-#### 使用示例
+**核心关系**：`Delegate.h` 和 `MulticastDelegate.h` 是"普通委托"（编译期、不可序列化），`DynamicDelegate.h` 是"动态委托"（运行期、可反射）。它们各自都有单播/多播两个变体。
+
+---
+
+#### 二、四种委托总览（先看这张表）
+
+| 类型 | 声明宏 | 能否多绑 | 能否被蓝图用 | 能否序列化 | 使用场景 |
+|------|--------|:------:|:----------:|:--------:|---------|
+| **单播委托** | `DECLARE_DELEGATE[_XParam]` | ❌ 只能绑1个 | ❌ | ❌ | C++ 内部回调、事件处理 |
+| **多播委托** | `DECLARE_MULTICAST_DELEGATE[_XParam]` | ✅ 可绑多个 | ❌ | ❌ | C++ 广播通知（最常用） |
+| **动态单播** | `DECLARE_DYNAMIC_DELEGATE[_XParam]` | ❌ | ✅ | ✅ | 需要暴露给蓝图/保存 |
+| **动态多播** | `DECLARE_DYNAMIC_MULTICAST_DELEGATE[_XParam]` | ✅ | ✅ | ✅ | 蓝图事件分发器（如 OnHit） |
+
+> `_XParam` 表示参数个数，如 `DECLARE_DELEGATE_OneParam`（1个参）、`DECLARE_DELEGATE_TwoParams`（2个参）。
+
+**选型口诀**：
+
+```
+需要暴露给蓝图 或 需要序列化保存？
+├─ 要 → 动态委托（DECLARE_DYNAMIC_*）
+└─ 不要 → 只绑一个还是多个？
+          ├─ 一个 → 单播委托（DECLARE_DELEGATE，Execute）
+          └─ 多个 → 多播委托（DECLARE_MULTICAST_DELEGATE，Broadcast）
+```
+
+#### 选型判断表（先问 3 个问题）
+
+选委托类型只问自己三件事：
+
+1. **要不要暴露给蓝图？** → 要就用动态（第 4 类）
+2. **要绑多个还是一个？** → 多个用多播（第 2/4 类）
+3. **要不要保存/序列化？** → 要就用动态（第 4 类）
+
+```
+事件要不要暴露给蓝图？
+│
+├── 不要 → 绑一个还是多个？
+│          ├─ 一个 → 单播委托  例：查询冷却是否就绪
+│          └─ 多个 → 多播委托  例：掉血通知血条/飘字/音效
+│
+└── 要 → 绑一个还是多个？
+         ├─ 一个 → 动态单播  例：蓝图定制关卡进入逻辑
+         └─ 多个 → 动态多播  例：死亡通知蓝图演出+C++掉落
+```
+
+**容易混淆的是「单播 vs 多播」（都 C++）和「动态单播 vs 动态多播」（都动态），区别只在「绑一个还是绑多个」。记住「查询用单播，通知用多播」就不会选错。**
+
+---
+
+#### 四种委托的具体场景（重要，务必吃透）
+
+##### ① 单播委托 → 一问一答（只绑一个 C++ 回调）
+
+**场景：技能系统 —— 「技能准备就绪后，查询冷却时间」**
+
+技能对象想知道"这个技能还能不能用"，只有**一个**系统需要这个回调（如 HUD 冷却图标），且**不需要给蓝图**。
 
 ```cpp
 // 声明
-DECLARE_MULTICAST_DELEGATE_TwoParams(FOnDamageTaken, float, FVector);
+DECLARE_DELEGATE_RetVal(bool, FQuerySkillReady);
 
-// 类中使用
-class AMyCharacter : public ACharacter {
-    FOnDamageTaken OnDamageTaken;
-    
-    void TakeDamage(float Amount, FVector Location) {
-        OnDamageTaken.Broadcast(Amount, Location);  // 广播给所有绑定者
+class USkill {
+public:
+    FQuerySkillReady OnQueryReady;   // 单播：只绑一个
+
+    bool IsReady() {
+        // 有绑定就执行（返回是否就绪），没绑定默认不可用
+        return OnQueryReady.IsBound() ? OnQueryReady.Execute() : false;
     }
 };
 
-// 外部绑定
+// 某处绑定（只绑了 HUD 这一个）
+Skill->OnQueryReady.BindUObject(HudComp, &UCooldownWidget::CheckCooldown);
+```
+
+**为什么用单播**：查询类回调本质是"**一问一答**"，只需要一个回答者，多个回答者会造成混乱。
+
+---
+
+##### ② 多播委托 → 广播给所有人（绑多个 C++ 回调，最常用）
+
+**场景：伤害系统 —— 「角色掉血，血条/飘字/音效都更新」**
+
+角色受伤，血条、伤害飘字、连击判定、音效都要**同时响应**，且都不给蓝图。
+
+```cpp
+// 声明
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnDamaged, float, AActor*);
+
+class ACharacter {
+public:
+    FOnDamaged OnDamaged;      // 多播：可以绑很多个
+
+    void TakeDamage(float Amount, AActor* Causer) {
+        OnDamaged.Broadcast(Amount, Causer);  // 一次性通知所有绑定者
+    }
+};
+
+// 多个系统各自绑定
+Char->OnDamaged.AddUObject(HpBar,    &UHPBar::UpdateValue);    // 血条
+Char->OnDamaged.AddUObject(DamageUI, &UDamageNum::ShowNumber); // 伤害飘字
+Char->OnDamaged.AddUObject(Combo,    &UComboMgr::BreakCombo);  // 连击中断
+```
+
+**为什么用多播**：这是"**通知**"而非"查询"，一个事件有多个听众，多播让它们**全部收到**。
+
+---
+
+##### ③ 动态单播 → 蓝图专属单发（暴露给蓝图 + 可保存）
+
+**场景：关卡系统 —— 「玩家进入关卡时，蓝图定制一次初始化」**
+
+关卡蓝图需要**自己决定**进入关卡后执行什么逻辑，且这个绑定要能**保存进关卡资产**。
+
+```cpp
+// 声明
+DECLARE_DYNAMIC_DELEGATE(FOnLevelEntered);
+
+UCLASS()
+class ALevelDirector : public AActor {
+    GENERATED_BODY()
+public:
+    UPROPERTY(BlueprintAssignable)
+    FOnLevelEntered OnLevelEntered;   // 动态单播：蓝图可绑，可保存
+
+    void EnterLevel() {
+        OnLevelEntered.ExecuteIfBound();  // 蓝图绑定的逻辑会执行
+    }
+};
+```
+
+**为什么用动态单播**：蓝图只能绑动态委托（普通委托蓝图不认识），且 `UPROPERTY` 能把它**保存进关卡**资产，普通单播做不到。
+
+---
+
+##### ④ 动态多播 → 蓝图+C++ 都收（引擎 OnHit 同款，最典型）
+
+**场景：角色死亡 —— 「死亡时，蓝图和 C++ 都要收到通知」**
+
+C++ 要处理掉落，蓝图要做死亡演出，**都绑到同一个事件**上。引擎自带的 `OnHit`、`OnLanded`、`OnComponentBeginOverlap` 全是这种。
+
+```cpp
+// 声明（引擎自带的就是这种）
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnDeath, AActor*, Victim);
+
+UCLASS(Blueprintable)
+class ACharacter : public ACharacter {
+    GENERATED_BODY()
+public:
+    UPROPERTY(BlueprintAssignable, Category="Event")  // ← 关键：蓝图可绑
+    FOnDeath OnDeath;
+
+    void Die() {
+        OnDeath.Broadcast(this);  // C++ 和蓝图绑定的全都会收到
+    }
+};
+```
+
+**为什么用动态多播**：**既要给蓝图用、又要绑多个**，引擎所有"事件"都用它。
+
+---
+
+#### 三、单播委托（DECLARE_DELEGATE）
+
+只能绑**一个**函数，用 `Execute()` 调用。
+
+```cpp
+// ① 声明（在头文件里）
+DECLARE_DELEGATE_OneParam(FOnHealthChanged, float);
+
+// ② 使用
+class AMyCharacter {
+public:
+    FOnHealthChanged OnHealthChanged;      // 委托成员
+
+    void SetHealth(float NewHealth) {
+        OnHealthChanged.ExecuteIfBound(NewHealth); // 触发，没绑就跳过
+    }
+};
+
+// ③ 绑定
+Character->OnHealthChanged.BindUObject(this, &AMyUI::UpdateHealthBar);
+// Character->OnHealthChanged.BindRaw(...);   // 绑定裸 C++ 对象
+// Character->OnHealthChanged.BindLambda(...); // 绑定 lambda
+```
+
+| 方法 | 作用 |
+|------|------|
+| `Bind*` | 绑定一个函数（只能绑一个，再绑会覆盖） |
+| `Execute(参数)` | 调用绑定的函数（**未绑定时调用会崩溃**） |
+| `ExecuteIfBound(参数)` | 安全调用，未绑定就跳过 |
+| `Unbind()` | 解除绑定 |
+
+**注意**：单播委托用 `Execute` 前**一定要 `IsBound()` 检查或直接用 `ExecuteIfBound`**，否则崩溃。
+
+---
+
+#### 四、多播委托（DECLARE_MULTICAST_DELEGATE）★ 最常用
+
+能绑**多个**函数，用 `Broadcast()` 依次全部调用。**UI 事件、伤害通知、技能触发**基本都是它。
+
+```cpp
+// ① 声明
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnDamageTaken, float, FVector);
+
+// ② 类中持有并广播
+class AMyCharacter : public ACharacter {
+public:
+    FOnDamageTaken OnDamageTaken;
+
+    void TakeDamage(float Amount, FVector Location) {
+        OnDamageTaken.Broadcast(Amount, Location); // 广播给所有绑定者
+    }
+};
+
+// ③ 外部多路绑定
+Character->OnDamageTaken.AddUObject(this, &AMyUI::ShowDamageNumber);
+Character->OnDamageTaken.AddUObject(this, &ASoundManager::PlayHitSound);
 Character->OnDamageTaken.AddLambda([](float Amount, FVector Loc) {
     UE_LOG(LogTemp, Warning, TEXT("受伤 %.1f 位置 %s"), Amount, *Loc.ToString());
 });
 ```
 
-#### 委托的执行模型
+| 方法 | 作用 |
+|------|------|
+| `AddUObject` | 绑定 UObject 成员函数（弱引用，对象销毁自动移除） |
+| `AddRaw` | 绑定裸 C++ 对象（**不管理生命周期**，对象销毁前必须手动 Remove，否则悬垂崩溃） |
+| `AddLambda` | 绑定 lambda（捕获的对象生命周期由你自己负责） |
+| `Broadcast(参数)` | 依次调用所有绑定者，**无绑定时安全不崩** |
+| `Clear()` | 清空所有绑定 |
+| `IsBound()` | 是否有绑定 |
+
+> ⚠️ **安全红线**：`AddRaw` 和捕获裸指针的 `AddLambda` 是悬垂崩溃两大来源。如果被绑对象可能先于委托销毁，必须用 `Remove*` 主动解绑，或改用 `AddUObject`。
+
+---
+
+#### 五、动态委托（DECLARE_DYNAMIC_*）
+
+动态委托的核心差异：**基于 UObject 反射系统**，可以被 UPROPERTY 标记、序列化保存、暴露给蓝图。
+
+```cpp
+// 动态单播（可保存、可蓝图绑定，但只能绑1个）
+DECLARE_DYNAMIC_DELEGATE_RetVal(bool, FCanUseSkill);
+
+// 动态多播（蓝图事件分发器，最典型）
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnDeath, AActor*, AController*);
+
+UCLASS()
+class AMyCharacter : public ACharacter {
+    GENERATED_BODY()
+public:
+    UPROPERTY(BlueprintAssignable)      // ← 关键：允许蓝图绑定
+    FOnDeath OnDeath;
+};
+```
+
+**动态委托的限制**：
+
+- **性能更差**：走反射，比普通委托慢
+- **只能绑定蓝图函数 或 UObject 上的 UFUNCTION**，不能绑 lambda / 裸 C++ 函数
+- **参数类型有限制**：必须是反射系统能处理的类型（不能是 `TArray<int>` 这种组合类型，但支持 `TArray<FString>` 等部分组合）
+
+---
+
+#### 六、委托的执行模型（原理）
 
 ```
 单播委托：
@@ -277,6 +559,60 @@ Character->OnDamageTaken.AddLambda([](float Amount, FVector Loc) {
   Delegate.AddLambda(...);
   Delegate.Broadcast(Param); → 依次调用所有绑定的函数
 ```
+
+**内部存储**：委托本质上存一个 **函数指针 + 可选对象指针**（`TBaseDelegate` 用类型擦除把各种签名统一存储，`DelegateBase.h` 负责）。多播委托内部维护一个 **TArray<TDelegate>**，`Broadcast` 就是遍历这个数组逐个调用。
+
+**绑定列表的合法性**：多播委托内部在调用时会检查每个绑定项是否仍有效（`IsCompactValid` / `CompactInvalidate`），所以对象销毁后 `AddUObject` 绑的项会被自动清理——这就是它比裸函数指针安全的原因。
+
+---
+
+#### 七、常见陷阱
+
+**① 单播委托忘了判断就 Execute → 崩溃**
+```cpp
+// ❌ 没绑定就 Execute 直接崩
+OnEvent.Execute(1);
+
+// ✅ 安全写法
+if (OnEvent.IsBound()) OnEvent.Execute(1);
+// 或
+OnEvent.ExecuteIfBound(1);
+```
+
+**② 被绑对象销毁，委托还在 → 悬垂崩溃**
+```cpp
+// ❌ AddRaw 绑了裸对象，对象 delete 后委托还留着 → 调用就崩
+SomeDelegate.AddRaw(&obj, &MyObj::OnEvent);
+delete &obj;
+
+// ✅ 用 AddUObject 自动清理，或对象销毁前手动 RemoveRaw
+SomeDelegate.AddUObject(&obj, &MyObj::OnEvent);
+```
+
+**③ 动态委托在 C++ 里绑定 lambda → 编译失败**
+```cpp
+// ❌ 动态委托只能用 UObject/蓝图函数，不能绑 lambda
+FOnDeath.OnDeath.AddLambda([this](){ ... });   // 编译不过
+
+// ✅ 动态委托只能这样绑
+Character->OnDeath.AddDynamic(this, &AMyUI::HandleDeath);
+```
+
+**④ 在 Tick / 高频循环里调用动态委托 → 性能浪费**
+动态委托走反射，高频触发用普通多播委托即可。
+
+---
+
+#### 八、与其他机制的对比（什么时候不用委托）
+
+| 场景 | 用委托还是别的 |
+|------|--------------|
+| C++ 对象间解耦回调 | ✅ 单播/多播委托 |
+| 暴露事件给蓝图 | ✅ 动态多播委托 |
+| 想持久化保存事件配置 | ✅ 动态委托（可序列化） |
+| 需要知道"某对象销毁" | ❌ 用 `FOnDestroyed` / `TWeakObjectPtr` + 委托 |
+| 想监听输入/碰撞等引擎事件 | ❌ 引擎已内置，直接重写回调/用 EventDispatcher |
+| 纯 C++ 高性能事件总线 | ✅ 普通多播委托（不用动态） |
 
 ---
 
@@ -498,3 +834,96 @@ FName B(TEXT("LongName123"));
 // A == B  → 比较哈希（快但理论上有碰撞风险）
 // 如果需要绝对精确，用 A.IsEqual(B, ENameCompareFlags::CaseSensitive)
 ```
+
+---
+
+## 七、Core/Public 全目录速查（UE5.6 实际清单）
+
+> 这是 `Engine/Source/Runtime/Core/Public/` 下**真实存在的全部子目录**，按"干什么的"分类说明。比文档开头的简化图更全。
+
+### 7.1 核心基础（★ 常打交道）
+
+| 目录 | 干什么的 |
+|------|---------|
+| `Containers/` | **容器**：TArray、TMap、TSet、FString、TSharedPtr（最常用） |
+| `Math/` | **数学**：FVector、FRotator、FTransform、FMath（99 个文件，很大） |
+| `Templates/` | **模板工具**：MoveTemp、类型推断、Function、Tuple、智能指针源码 |
+| `Delegates/` | **委托**：单播/多播/动态委托（Delegate.h 等） |
+| `UObject/` | **FName 名字系统**（NameTypes.h）+ 部分 UObject 基础 |
+
+### 7.2 底层系统（理解原理用）
+
+| 目录 | 干什么的 |
+|------|---------|
+| `HAL/` | **硬件抽象层**：线程、锁、文件、内存接口（跨平台，93 个文件，最大之一） |
+| `Serialization/` | **序列化**：FArchive、内存读写（存盘/读档/网络传输底层） |
+| `Async/` | **异步**：Future/Promise、TaskGraph、ParallelFor（多线程任务） |
+| `Tasks/` | **任务系统**：UE 的 Task 系统（比 TaskGraph 更现代） |
+| `IO/` | **IO 操作**：异步文件/流读取 |
+| `Memory/` | **内存管理**：内存池、分配器细节 |
+| `String/` | **字符串处理**：字符转换、字符串算法（补充 FString 外的工具） |
+| `Hash/` | **哈希**：哈希函数、散列工具 |
+| `Traits/` | **类型特征**：编译期类型判断（TypeTraits 拆分出来的） |
+| `Concepts/` | **C++ 概念**：模板约束（C++20 Concepts 封装） |
+| `Compression/` | **压缩**：LZ4、Oodle 等压缩算法 |
+| `Stats/` | **统计**：游戏统计、性能计数（STAT 宏） |
+| `ProfilingDebugging/` | **性能分析**：Profile 标记、调试工具（35 个文件） |
+| `Logging/` | **日志**：Log.h、LogCategory.h（UE_LOG 定义在这） |
+| `Misc/` | **杂项**：断言、配置文件、命令行、各种工具（181 个文件，最大目录） |
+
+### 7.3 平台相关（跨平台，一般不用管）
+
+| 目录 | 干什么的 |
+|------|---------|
+| `GenericPlatform/` | **通用平台层**：所有平台的基类（跨平台代码都在这） |
+| `Windows/` `Microsoft/` `MSVC/` | Windows 平台实现 |
+| `Linux/` `Unix/` `Clang/` | Linux 平台实现 |
+| `Mac/` `Apple/` | Mac 平台实现 |
+| `IOS/` `Android/` | 移动平台实现 |
+| `IntelICX/` | Intel 编译器实现 |
+
+> 这些是"同一套接口，不同平台的实现"。你用 `IFileManager`、`FPlatformMisc` 时，底层会跳到对应平台目录。**正常开发不用碰。**
+
+### 7.4 其他（了解即可）
+
+| 目录 | 干什么的 |
+|------|---------|
+| `Algo/` | **算法库**：Sort、BinarySearch、Transform（类似 std::algorithm，44 个文件） |
+| `Audio/` | **音频**：基础音频类型 |
+| `ColorManagement/` | **颜色管理**：色彩空间转换 |
+| `Internationalization/` | **本地化**：多语言翻译、Text 系统 |
+| `Modules/` | **模块系统**：FModuleManager（加载/卸载模块） |
+| `Features/` | **特性开关**：游戏特性开关 |
+| `FileCache/` | **文件缓存**：DDC 相关 |
+| `Experimental/` | **实验性**：ConcurrentLinearAllocator 等实验代码 |
+| `FramePro/` `MemPro/` | **第三方性能分析**工具接入 |
+| `Sanitizer/` | **内存检查**：ASan/UBSan 等消毒器接口 |
+| `AutoRTFM/` | **事务内存**：实验性原子内存系统 |
+| `Virtualization/` | **虚拟化**：资产虚拟化（大世界资产流送） |
+| `Tests/` | **测试**：单元测试基础 |
+
+### 7.5 根目录的 .h 文件（一进 Core 就有的）
+
+| 文件 | 干什么的 |
+|------|---------|
+| `Core.h` | Core 模块总入口头文件 |
+| `CoreMinimal.h` | **最小依赖头**（最常用，include 它够用大多数场景） |
+| `CoreFwd.h` | **前向声明**（只声明类名，不定义） |
+| `CoreTypes.h` | 基础类型定义（int32、float、TCHAR、FString 声明） |
+| `CoreGlobals.h` | 全局变量、全局函数声明（GEngine、GWarn 等） |
+| `CoreSharedPCH.h` | 共享预编译头 |
+| `PixelFormat.h` | 像素格式定义（渲染相关） |
+
+> **新手最常 include 的是 `CoreMinimal.h`**——它包含了大部分常用类型，一个头够用。
+
+### 7.6 学习建议（哪些值得看，哪些不用管）
+
+| 类别 | 要不要学 | 建议 |
+|------|:---:|------|
+| Containers / Math / Delegates / Templates | ✅ 重点 | 日常开发天天用 |
+| UObject(FName) / Logging / String | ✅ 常碰 | 用得多 |
+| HAL / Serialization / Async / Misc | ⭐ 理解 | 懂概念即可，用到再深入 |
+| 平台目录（Windows/Linux...） | ❌ 不用管 | 正常开发不碰 |
+| Algo / Stats / Hash / Experimental | ❌ 遇再看 | 需要时查 |
+
+**一句话**：Core/Public 里，**开发时真正高频的是 Containers/Math/Delegates/Templates** 这几个；平台目录和一堆底层工具（Algo/Stats/Hash/IO...）**不用主动学**，遇到再查。知道"每个目录大概是干嘛的"，就能在需要时准确找到地方。
