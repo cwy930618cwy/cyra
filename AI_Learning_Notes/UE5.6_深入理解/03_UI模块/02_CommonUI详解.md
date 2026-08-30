@@ -187,6 +187,131 @@ CommonUI = 基于 UMG 的高级游戏 UI 框架
 
 ---
 
-## 八、下一步
+## 八、完整案例：手柄可导航的主菜单（怎么实际用）
+
+> 一个能直接跑起来的完整案例，从建 Widget 到显示，一步步讲。**展示 CommonUI 实际怎么用。**
+
+**场景**：做一个主菜单，支持手柄方向键导航 + 键鼠点击。
+
+### 第 1 步：创建 Widget Blueprint
+
+```
+Content Browser → 右键 → User Interface → Widget Blueprint
+→ 命名为 UI_MainMenu
+→ 父类选 CommonActivatableWidget（关键！）
+```
+
+> **为什么不选普通 UserWidget**：`CommonActivatableWidget` 才支持"激活/关闭管理 + 手柄导航"。
+
+### 第 2 步：在蓝图里拖 CommonButtonBase 按钮
+
+```
+拖一个 VerticalBox（竖排）
+  ├─ CommonButtonBase → StartButton（开始游戏）
+  ├─ CommonButtonBase → OptionsButton（选项）
+  └─ CommonButtonBase → QuitButton（退出）
+```
+
+> **关键**：用 `CommonButtonBase`（不是普通 Button），才能手柄方向键导航。
+
+### 第 3 步：C++ 继承 CommonActivatableWidget 并绑定按钮
+
+```cpp
+// MainMenuWidget.h
+#pragma once
+#include "CommonActivatableWidget.h"
+#include "MainMenuWidget.generated.h"
+
+class UCommonButtonBase;
+
+UCLASS()
+class UMainMenuWidget : public UCommonActivatableWidget {
+    GENERATED_BODY()
+public:
+    UPROPERTY(meta=(BindWidget))    // 绑定蓝图里同名按钮
+    UCommonButtonBase* StartButton;
+
+    UPROPERTY(meta=(BindWidget))
+    UCommonButtonBase* OptionsButton;
+
+protected:
+    virtual void NativeOnActivated() override;   // 激活时调用
+    virtual void NativeConstruct() override;     // 绑定点击
+};
+```
+
+```cpp
+// MainMenuWidget.cpp
+#include "MainMenuWidget.h"
+#include "CommonButtonBase.h"
+
+void UMainMenuWidget::NativeConstruct() {
+    Super::NativeConstruct();
+    StartButton->OnClicked().AddUObject(this, &UMainMenuWidget::StartGame);
+    OptionsButton->OnClicked().AddUObject(this, &UMainMenuWidget::OpenOptions);
+}
+
+void UMainMenuWidget::NativeOnActivated() {
+    Super::NativeOnActivated();
+    StartButton->SetFocus();   // 手柄默认选中"开始游戏"
+}
+
+void UMainMenuWidget::StartGame() {
+    UGameplayStatics::OpenLevel(this, TEXT("Level_1"));   // 开始游戏
+}
+
+void UMainMenuWidget::OpenOptions() {
+    // 打开设置界面（Push 到 UI 栈）
+}
+```
+
+### 第 4 步：在 PlayerController 里显示主菜单
+
+```cpp
+UCLASS()
+class AMyPlayerController : public APlayerController {
+    GENERATED_BODY()
+public:
+    virtual void BeginPlay() override {
+        Super::BeginPlay();
+        // 创建主菜单
+        UMainMenuWidget* Menu = CreateWidget<UMainMenuWidget>(this, MenuClass);
+        Menu->AddToViewport();                 // 显示
+        bShowMouseCursor = true;               // PC 也能鼠标点
+        FInputModeUIOnly Mode;                  // UI 吃所有输入（角色不能动）
+        Mode.SetWidgetToFocus(Menu->TakeWidget());
+        SetInputMode(Mode);
+    }
+};
+```
+
+### 完整流程总结
+
+```
+1. 创建 Widget Blueprint（父类 CommonActivatableWidget）
+2. 拖 CommonButtonBase 按钮（手柄可导航）
+3. C++ 继承 + BindWidget 绑定按钮
+   → NativeOnActivated 设手柄默认焦点
+   → OnClicked 绑定点击逻辑
+4. PlayerController 里 CreateWidget + AddToViewport + 设 UI 输入模式
+```
+
+**效果**：
+- **手柄玩家**：按"上/下"方向键在 开始/选项/退出 间移动，按"确认"激活
+- **键鼠玩家**：鼠标直接点按钮
+- 打开后**角色不能动**（UI 吃输入）
+
+### CommonUI 在这起到的作用
+
+| CommonUI 干了啥 | 对应代码 |
+|----------------|---------|
+| 手柄能导航按钮 | 用 `CommonButtonBase`（不是普通 Button） |
+| 管理 UI 激活/关闭 | 继承 `CommonActivatableWidget` |
+| 手柄默认选中 | `NativeOnActivated` 里 `SetFocus()` |
+| UI 吃输入 | `FInputModeUIOnly` + `SetInputMode` |
+
+---
+
+## 九、下一步
 
 理解了 CommonUI，接下来可以深入 **UMG 基础控件 + UUserWidget**（怎么做血条/按钮/绑定数据），这是无论用不用 CommonUI 都要掌握的 UI 核心。
