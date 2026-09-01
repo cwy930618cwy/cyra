@@ -49,7 +49,7 @@ class ALyraPawn : public AModularPawn,        // ① 模块化 Pawn 空壳
 ### ② 类声明：两个父类
 
 ```cpp
-UCLASS(MinimalAPI)                    // MinimalAPI：只导出必要符号（减小包体）
+UCLASS(MinimalAPI)                    // MinimalAPI：反射数据只导出最小必要部分（减小包体/命名空间），但不影响 C++ 跨模块调用（那由 LYRAGAME_API 管）
 class ALyraPawn : public AModularPawn,          // 继承模块化 Pawn
                   public ILyraTeamAgentInterface // 实现"队伍代理"接口
 {
@@ -60,7 +60,18 @@ class ALyraPawn : public AModularPawn,          // 继承模块化 Pawn
 - `AModularPawn`：提供"能挂组件"的能力（Modular 框架）。
 - `ILyraTeamAgentInterface`：让 Lyra 的队伍系统能统一访问"这个单位的队伍 ID"，不用管它具体是什么类。
 
-> ⚠️ `MinimalAPI` 表示这个类只在 LyraGame 内部用，不向其他模块暴露细节——因为它就是个简单基类。
+> ⚠️ **别和第 40 行的 `LYRAGAME_API` 搞混！** 两者管的是不同的事：
+>
+> | 机制 | 写法 | 管什么 |
+> |------|------|--------|
+> | **API 导出宏** | `#define UE_API LYRAGAME_API`（第 40 行） | **C++ 能不能被链接调用**——让别的模块能 `#include` 并调用本类函数（大门开着） |
+> | **UCLASS 修饰符** | `UCLASS(MinimalAPI)`（这里） | **反射数据导不导出**——控制蓝图/编辑器能看到多少内部细节（菜谱不全公开） |
+>
+> - `MinimalAPI` **不是**"不让人跨模块用"——能不能跨模块调用由 `LYRAGAME_API` 决定，那扇门照样开着。
+> - `MinimalAPI` 只是说"**别把这个类的全部反射信息都导出**"：只导出最小必要符号，减小包体、避免污染全局命名空间。
+> - **为什么一个开放一个收紧？** 因为它俩面向不同对象：`LYRAGAME_API` 是给 **C++ 程序员**调用用的（该开放，否则别人 new 不出这个类）；`MinimalAPI` 是给 **蓝图/编辑器反射**看的（该收紧，这是个简单基类，没必要把所有细节塞进反射数据库）。
+>
+> **类比**：餐厅大门开着（别的厨师能进厨房借灶台 = `LYRAGAME_API`），但内部菜谱不全贴出来（只说"有灶台可用"，不暴露怎么炒 = `MinimalAPI`）。
 
 ---
 
