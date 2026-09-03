@@ -278,3 +278,45 @@
 3. 提供**实战练习脚手架**（新 Experience / 新 GA / 新武器的起步代码）
 
 告诉我你想从哪一步开始即可。
+
+---
+
+## 本地路径速查（不用每次找）
+
+> 直接复制粘贴到文件资源管理器或 IDE 打开。
+
+### Lyra 工程（5.6 版源码）
+
+```
+e:\code\lyra_fifty_six\LyraStarterGame
+```
+
+**常用子路径**：
+- Lyra C++ 源码：`e:\code\lyra_fifty_six\LyraStarterGame\Source\LyraGame`
+- Lyra 插件：`e:\code\lyra_fifty_six\LyraStarterGame\Plugins`
+- Lyra 资产：`e:\code\lyra_fifty_six\LyraStarterGame\Content`
+
+### UE5.6 引擎（源码）
+
+```
+d:\ue5\Epic Games\UE_5.6
+```
+
+**常用子路径**：
+- 引擎 C++ 源码：`d:\ue5\Epic Games\UE_5.6\Engine\Source`
+- Core 模块：`d:\ue5\Epic Games\UE_5.6\Engine\Source\Runtime\Core`
+- CoreUObject 模块：`d:\ue5\Epic Games\UE_5.6\Engine\Source\Runtime\CoreUObject`
+- Engine 模块：`d:\ue5\Epic Games\UE_5.6\Engine\Source\Runtime\Engine`
+
+### 常用源码文件（引擎）
+
+| 找什么 | 路径 |
+|--------|------|
+| APawn | `Engine\Source\Runtime\Engine\Classes\GameFramework\Pawn.h` |
+| ACharacter | `Engine\Source\Runtime\Engine\Classes\GameFramework\Character.h` |
+| AActor | `Engine\Source\Runtime\Engine\Classes\GameFramework\Actor.h` |
+| UObject | `Engine\Source\Runtime\CoreUObject\Public\UObject\Object.h` |
+| FObjectInitializer | `Engine\Source\Runtime\CoreUObject\Public\UObject\UObjectGlobals.h` |
+| 反射宏 | `Engine\Source\Runtime\CoreUObject\Public\UObject\ObjectMacros.h` |
+
+> **提示**：完整路径前缀引擎为 `d:\ue5\Epic Games\UE_5.6\`，Lyra 为 `e:\code\lyra_fifty_six\LyraStarterGame\`，上表省略了前缀。
