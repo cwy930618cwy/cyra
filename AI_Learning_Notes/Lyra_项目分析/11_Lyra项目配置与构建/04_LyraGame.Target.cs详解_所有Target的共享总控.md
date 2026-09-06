@@ -233,32 +233,62 @@ else if (bForceDisabled) Target.DisablePlugins.Add(名字);
 
 ---
 
-## 六、总结解剖图
+## 六、总结解剖图：直接对着源码结构看
 
 ```
-  LyraGame.Target.cs —— 全工程构建体系的总控台
- ══════════════════════════════════════════════════════════════
-  段落                          │ 作用
- ──────────────────────────────┼──────────────────────────────
- 构造函数 (L11-20)              │ 自己是 Game 目标：单机/测试进程
-                               │
- ApplySharedLyraTargetSettings  │ 共享配置，所有 Target 都调：
-   · 块A 编译规范 V5/Latest     │   → 全项目统一编译规矩
-   · 块B 变量遮蔽→编译错误       │   → 代码质量红线
-   · 块C 证书校验               │   → Shipping 安全加固
-   · 块D ini 读取禁止           │   → 防玩家改配置
-   · 块E 禁 OpenImageDenoise    │   → 非编辑器瘦身省内存
-   · 块F 调用玩法包开关器        │   → 见下
-   · 块G Shared 环境分支        │   → Launcher 引擎打包的限制
-                               │
- ConfigureGameFeaturePlugins    │ 扫 Plugins/GameFeatures
-   · 逐个读 .uplugin JSON       │   按 EditorOnly / RestrictToBranch /
-   · 裁决后 Enable/Disable      │   NeverBuild ... 自动启用/禁用
- ══════════════════════════════════════════════════════════════
-  一句话：20 行为自己，260 行为全 Lyra——
-         Client/Server/Editor 调它的共享方法，
-         Steam/EOS 变体继承它的类，
-         所有 Target 的"编译规矩 + 玩法包开关"都从这一个文件出发。
+     LyraGame.Target.cs（283行）真实骨架：左=代码本身 │ 右=一句批注
+══════════════════════════════════════════════════════════════════
+ class LyraGameTarget : TargetRules                 │ 类名=文件名
+ {                                                 │
+   LyraGameTarget(TargetInfo Target)               │ 构造函数(UBT来调用)
+   {                                               │
+     Type = TargetType.Game;                       │ 我是 Game 目标
+     ExtraModuleNames.AddRange(                    │ 打包要带模块：
+       new string[]{ "LyraGame" });                │   LyraGame
+     LyraGameTarget.ApplySharedLyraTargetSettings( │ 调下面的共享方法
+       this);                                      │   (把自己传进去)
+   }                                               │
+  ─────────────────────────────────────────────────┼────────────────
+   static ApplySharedLyraTargetSettings(Target)    │ ★所有其他 Target
+   {                                               │   都来调这个方法
+     Target.DefaultBuildSettings = V5;             │ 统一编译规范
+     Target.IncludeOrderVersion = Latest;          │ 统一头文件顺序
+     if (Unique 构建环境) {                         │ "独构建"才可调配置
+       ShadowVariableWarningLevel = Error;         │ 变量遮蔽=编译错误
+       if (Shipping && !专服)                      │ 正式发布包:
+         bDisableUnverifiedCertificates = true;    │   HTTPS强制验证书
+       if (Shipping || Test)                       │ 玩家不可读 ini：
+         bAllowGeneratedIniWhenCooked = false;     │   禁Generated ini
+         bAllowNonUFSIniWhenCooked = false;        │   禁NonUFS ini
+       if (Type != Editor) {                       │ 非编辑器瘦身：
+         DisablePlugins.Add("OpenImageDenoise");   │   禁光追去噪(省体积)
+         GlobalDefinitions.Add("UE_ASSETREGISTRY_  │   省内存宏
+           INDIRECT_ASSETDATA_POINTERS=1");        │
+       }                                           │
+       ConfigureGameFeaturePlugins(Target);        │ 收尾:自动开关玩法包↓
+     }                                             │
+     else if (Editor) { ... } else { 警告一次 }     │ Shared环境分支
+   }                                               │
+  ─────────────────────────────────────────────────┼────────────────
+   static ConfigureGameFeaturePlugins(Target)      │ ★玩法包开关器
+   {                                               │
+     枚举 Plugins/GameFeatures/*.uplugin           │ 先找出所有玩法包
+     for (每个玩法包) {                             │ 逐个读它.json
+       if (EnabledByDefault 没写false)  警告;      │ 内置包应默认关闭
+       if (ExplicitlyLoaded 没写true)   警告;      │ 应显式加载
+       if (bBuildAll)                   启用;      │ 全构建开关
+       if (EditorOnly && 非Editor目标)  强制禁用;   │ 编辑器包不进游戏
+       if (RestrictToBranch 不符)       强制禁用;   │ 分支限制(如仅main)
+       if (NeverBuild)                  强制禁用;   │ 永远别编
+       解析异常(ParseException)          强制禁用;   │ 坏包不炸构建
+     }                                           │
+     if (bForceDisabled) bEnabled = false;        │ 强制禁用优先
+     Target.EnablePlugins.Add(名字) / DisablePlugins  │ 最后落锤
+   }                                               │
+══════════════════════════════════════════════════════════════════
+  一句话：20 行为自己（Type=Game），260 行为全 Lyra——
+         Client/Server/Editor 调它的共享方法(ApplyShared)，
+         Steam/EOS 变体继承它的类(class X : LyraGameTarget)。
 ```
 
 **本篇一句话**：`LyraGame.Target.cs` 是 Lyra 所有 Target 的**公共源头**——它的构造函数定义"Game 类型"模板，共享方法统一所有目标的编译规矩，GameFeature 函数负责打包时自动取舍玩法包。看懂它，Lyra 的构建体系就通了 80%。
