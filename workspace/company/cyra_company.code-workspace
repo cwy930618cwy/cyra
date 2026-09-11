@@ -1,8 +1,12 @@
 {
 	"folders": [
 		{
-			"name": "code (UE 项目)",
-			"path": "E:/ue5/cyra/code"
+			"name": "cyra 根目录",
+			"path": "E:/ue5/cyra"
+		},
+		{
+			"name": "LyraStarterGame 项目",
+			"path": "E:/ue5/LyraStarterGame5.6/LyraStarterGame"
 		},
 		{
 			"name": "UE5.6 引擎",
