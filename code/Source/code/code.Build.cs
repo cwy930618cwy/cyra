@@ -8,6 +8,14 @@ public class code : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 	
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore" });
+		PublicDependencyModuleNames.AddRange(new string[] { 
+			"Core", 
+			"CoreUObject", 
+			"Engine", 
+			"InputCore",
+			"GameplayAbilities",   // GAS 核心
+			"GameplayTags",        // Tag 系统
+			"GameplayTasks"        // 异步任务		
+		});
 	}
 }
